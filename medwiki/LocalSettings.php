@@ -140,3 +140,10 @@ $wgDefaultSkin = "vector-2022";
 # End of automatically generated settings.
 # Add more configuration options below.
 
+# Enable the Vector skin
+wfLoadSkin( 'Vector' );
+$wgDefaultSkin = 'vector';
+
+# Enable CategoryTree extension
+wfLoadExtension( 'CategoryTree' );
+
