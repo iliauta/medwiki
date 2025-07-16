@@ -1,0 +1,2 @@
+== Welcome, $USERNAME! ==
+This is your personal start page. You can customize it later.

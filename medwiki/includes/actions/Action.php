@@ -338,30 +338,77 @@ abstract class Action implements MessageLocalizer {
 	 * @throws UserBlockedError|ReadOnlyError|PermissionsError
 	 */
 	protected function checkCanExecute( User $user ) {
-		$right = $this->getRestriction();
-		$permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
-		if ( $right !== null ) {
-			$permissionManager->throwPermissionErrors( $right, $user, $this->getTitle() );
+		// Custom user group rights check
+		$dbr = wfGetDB( DB_REPLICA );
+		$userGroups = $user->getGroups();
+		$title = $this->getTitle()->getPrefixedText(); 
+		$hasAccess = false; 
+		foreach ($userGroups as $group) { 
+			$row = $dbr->selectRow(
+				'user_group_rights',
+				['can_access', 'include_subsections'],
+				[
+					'group_name' => $group,
+					'page_or_section' => $title
+				],
+				__METHOD__
+			);
+			if ($row && $row->can_access) {
+				$hasAccess = true;
+				break;
+			}
 		}
+		if (!$hasAccess) {
+			// Restrict access to all pages, including special pages, for users without access rights
+			$startPageTitle = 'User:' . $user->getName() . '/StartPage';
+			$titleObj = \Title::newFromText($startPageTitle);
+			$currentTitle = $this->getTitle()->getPrefixedText();
+			// If not already on their start page, redirect
+			if ($currentTitle !== $startPageTitle) {
+				$out = $this->getOutput();
+				$out->redirect($titleObj->getLocalURL());
+				return;
+			}
+			// If on their start page, create it if it does not exist
+			$wikiPage = \WikiPage::factory($titleObj);
+			if (!$wikiPage->exists()) {
+				$templatePath = __DIR__ . '/../../user_startpage_template.txt';
+				$templateText = @file_get_contents($templatePath);
+				if ($templateText === false) {
+					$templateText = "== Welcome, {$user->getName()}! ==\nThis is your personal start page. You can customize it later.";
+				}
+				// Replace $USERNAME in template with actual user name
+				$templateText = str_replace('$USERNAME', $user->getName(), $templateText);
+				$content = \ContentHandler::makeContent($templateText, $titleObj);
+				$wikiPage->doEditContent($content, 'User start page created with template', 0, false, $user);
+			}
+			// Allow access to the start page (even if empty)
+		}
+		// Default permission checks (commented out, using only custom logic)
+		// $right = $this->getRestriction();
+		// $permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
+		// if ( $right !== null ) {
+		//     $permissionManager->throwPermissionErrors( $right, $user, $this->getTitle() );
+		// }
 
 		// If the action requires an unblock, explicitly check the user's block.
-		$checkReplica = !$this->getRequest()->wasPosted();
-		if (
-			$this->requiresUnblock() &&
-			$permissionManager->isBlockedFrom( $user, $this->getTitle(), $checkReplica )
-		) {
-			$block = $user->getBlock();
-			if ( $block ) {
-				throw new UserBlockedError(
-					$block,
-					$user,
-					$this->getLanguage(),
-					$this->getRequest()->getIP()
-				);
-			}
+		// $checkReplica = !$this->getRequest()->wasPosted();
+		// if (
+		// 	$this->requiresUnblock() &&
+		// 	!$hasAccess
+		// ) {
+		// 	$block = $user->getBlock();
+		// 	if ( $block ) {
+		// 		throw new UserBlockedError(
+		// 			$block,
+		// 			$user,
+		// 			$this->getLanguage(),
+		// 			$this->getRequest()->getIP()
+		// 		);
+		// 	}
 
-			throw new PermissionsError( $this->getName(), [ 'badaccess-group0' ] );
-		}
+		// 	throw new PermissionsError( $this->getName(), [ 'badaccess-group0' ] );
+		// }
 
 		// This should be checked at the end so that the user won't think the
 		// error is only temporary when they also don't have the rights to execute
