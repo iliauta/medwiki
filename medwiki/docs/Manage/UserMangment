@@ -1,0 +1,7 @@
+| Action                        | Command                                                                                                 |
+|--------------------------------|--------------------------------------------------------------------------------------------------------|
+| Create/update user             | php maintenance/createAndPromote.php --force --password=NewPassword Username                          |
+| Disable (block) user           | php maintenance/blockUser.php --user=Username --reason="Disabled by admin" --expiry=infinity          |
+| Assign user to category/group  | php maintenance/assignUserToCategory.php "Username" "CategoryTitle" [read|edit]                      |
+| Create category and group      | php maintenance/createCategory.php "CategoryTitle"                                                    |
+|--------------------------------|--------------------------------------------------------------------------------------------------------|
