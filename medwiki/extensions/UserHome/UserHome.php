@@ -38,13 +38,16 @@ class SpecialUserDashboard extends SpecialPage {
             __METHOD__
         );
 
+        $categoryLinks = [];
         foreach ($res as $row) {
             $catTitle = Title::makeTitle(NS_CATEGORY, $row->cat_title);
-            // Check if user can read this category using PermissionManager
             $permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
             if ($permissionManager->userCan('read', $user, $catTitle)) {
-                $out->addWikiTextAsContent("* [[" . $catTitle->getPrefixedText() . "]]");
+                $categoryLinks[] = $catTitle;
             }
+        }
+        if ($categoryLinks) {
+            $out->addCategoryLinks($categoryLinks);
         }
 
         // Optionally, you can use CategoryTree extension for better visualization
