@@ -463,114 +463,94 @@ class Category {
 					] )
 					->where( [ 'cat_title' => $this->mName ] )
 					->caller( __METHOD__ )->execute();
-		} else {
-			# The category row doesn't exist but should, so create it. Use upsert in case of races.
-			$dbw->newInsertQueryBuilder()
-				->insertInto( 'category' )
-				->row( [
-					'cat_title' => $this->mName,
-					'cat_pages' => $result->pages,
-					'cat_subcats' => $result->subcats,
-					'cat_files' => $result->files
-				] )
-				->onDuplicateKeyUpdate()
-				->uniqueIndexFields( [ 'cat_title' ] )
-				->set( [
-					'cat_pages' => $result->pages,
-					'cat_subcats' => $result->subcats,
-					'cat_files' => $result->files
-				] )
-				->caller( __METHOD__ )->execute();
-
-			// --- Custom: Create user group and assign rights for new category ---
-			// Get the new category ID
-			$catRow = $dbw->newSelectQueryBuilder()
-				->select( 'cat_id' )
-				->from( 'category' )
-				->where( [ 'cat_title' => $this->mName ] )
-				->caller( __METHOD__ )->fetchRow();
-			if ( $catRow && isset($catRow->cat_id) ) {
-				$catId = $catRow->cat_id;
-				$groupName = 'cat_' . $catId;
-				// Insert group
+			} else {
+				# The category row doesn't exist but should, so create it. Use upsert in case of races.
 				$dbw->newInsertQueryBuilder()
-					->insertInto( 'groups' )
-					->row( [ 'group_name' => $groupName ] )
+					->insertInto( 'category' )
+					->row( [
+						'cat_title' => $this->mName,
+						'cat_pages' => $result->pages,
+						'cat_subcats' => $result->subcats,
+						'cat_files' => $result->files
+					] )
+					->onDuplicateKeyUpdate()
+					->uniqueIndexFields( [ 'cat_title' ] )
+					->set( [
+						'cat_pages' => $result->pages,
+						'cat_subcats' => $result->subcats,
+						'cat_files' => $result->files
+					] )
 					->caller( __METHOD__ )->execute();
-				// Get group_id
-				$groupRow = $dbw->newSelectQueryBuilder()
-					->select( 'group_id' )
-					->from( 'groups' )
-					->where( [ 'group_name' => $groupName ] )
+
+				// --- Custom: Create user group and assign rights for new category ---
+				// Get the new category ID
+				$catRow = $dbw->newSelectQueryBuilder()
+					->select( 'cat_id' )
+					->from( 'category' )
+					->where( [ 'cat_title' => $this->mName ] )
 					->caller( __METHOD__ )->fetchRow();
-				if ( $groupRow && isset($groupRow->group_id) ) {
-					$groupId = $groupRow->group_id;
-					// Ensure rights exist
-					$rights = ['read', 'edit'];
-					$rightIds = [];
-					foreach ($rights as $rightName) {
-						$rightRow = $dbw->newSelectQueryBuilder()
-							->select( 'right_id' )
-							->from( 'rights' )
-							->where( [ 'right_name' => $rightName ] )
-							->caller( __METHOD__ )->fetchRow();
-						if (!$rightRow) {
-							$dbw->newInsertQueryBuilder()
-								->insertInto( 'rights' )
-								->row( [ 'right_name' => $rightName ] )
-								->caller( __METHOD__ )->execute();
+				if ( $catRow && isset($catRow->cat_id) ) {
+					$catId = $catRow->cat_id;
+					$groupName = 'cat_' . $catId;
+					// Insert group
+					$dbw->newInsertQueryBuilder()
+						->insertInto( 'groups' )
+						->row( [ 'group_name' => $groupName ] )
+						->caller( __METHOD__ )->execute();
+					// Get group_id
+					$groupRow = $dbw->newSelectQueryBuilder()
+						->select( 'group_id' )
+						->from( 'groups' )
+						->where( [ 'group_name' => $groupName ] )
+						->caller( __METHOD__ )->fetchRow();
+					if ( $groupRow && isset($groupRow->group_id) ) {
+						$groupId = $groupRow->group_id;
+						// Ensure rights exist
+						$rights = ['read', 'edit'];
+						$rightIds = [];
+						foreach ($rights as $rightName) {
 							$rightRow = $dbw->newSelectQueryBuilder()
 								->select( 'right_id' )
 								->from( 'rights' )
 								->where( [ 'right_name' => $rightName ] )
 								->caller( __METHOD__ )->fetchRow();
+							if (!$rightRow) {
+								$dbw->newInsertQueryBuilder()
+									->insertInto( 'rights' )
+									->row( [ 'right_name' => $rightName ] )
+									->caller( __METHOD__ )->execute();
+								$rightRow = $dbw->newSelectQueryBuilder()
+									->select( 'right_id' )
+									->from( 'rights' )
+									->where( [ 'right_name' => $rightName ] )
+									->caller( __METHOD__ )->fetchRow();
+							}
+							if ($rightRow && isset($rightRow->right_id)) {
+								$rightIds[] = $rightRow->right_id;
+							}
 						}
-						if ($rightRow && isset($rightRow->right_id)) {
-							$rightIds[] = $rightRow->right_id;
+						// Link group and rights to category
+						foreach ($rightIds as $rightId) {
+							$dbw->newInsertQueryBuilder()
+								->insertInto( 'category_group_rights' )
+								->row( [
+									'cat_id' => $catId,
+									'group_id' => $groupId,
+									'right_id' => $rightId
+								] )
+								->caller( __METHOD__ )->execute();
 						}
-					}
-					// Link group and rights to category
-					foreach ($rightIds as $rightId) {
-						$dbw->newInsertQueryBuilder()
-							->insertInto( 'category_group_rights' )
-							->row( [
-								'cat_id' => $catId,
-								'group_id' => $groupId,
-								'right_id' => $rightId
-							] )
-							->caller( __METHOD__ )->execute();
 					}
 				}
+				else {
+					# The category is empty and has no description page, delete it
+					$dbw->newDeleteQueryBuilder()
+						->deleteFrom( 'category' )
+						->where( [ 'cat_title' => $this->mName ] )
+						->caller( __METHOD__ )->execute();
+					$this->mID = false;
+				}
 			}
-			} else {
-				# The category is empty and has no description page, delete it
-				$dbw->newDeleteQueryBuilder()
-					->deleteFrom( 'category' )
-					->where( [ 'cat_title' => $this->mName ] )
-					->caller( __METHOD__ )->execute();
-				$this->mID = false;
-			}
-		} elseif ( $shouldExist ) {
-			# The category row doesn't exist but should, so create it. Use
-			# upsert in case of races.
-			$dbw->newInsertQueryBuilder()
-				->insertInto( 'category' )
-				->row( [
-					'cat_title' => $this->mName,
-					'cat_pages' => $result->pages,
-					'cat_subcats' => $result->subcats,
-					'cat_files' => $result->files
-				] )
-				->onDuplicateKeyUpdate()
-				->uniqueIndexFields( [ 'cat_title' ] )
-				->set( [
-					'cat_pages' => $result->pages,
-					'cat_subcats' => $result->subcats,
-					'cat_files' => $result->files
-				] )
-				->caller( __METHOD__ )->execute();
-			// @todo: Should we update $this->mID here? Or not since Category
-			// objects tend to be short lived enough to not matter?
 		}
 
 		$dbw->endAtomic( __METHOD__ );
@@ -582,7 +562,7 @@ class Category {
 
 		return true;
 	}
-
+	
 	/**
 	 * Call refreshCounts() if there are no entries in the categorylinks table
 	 * or if the category table has a row that states that there are no entries
