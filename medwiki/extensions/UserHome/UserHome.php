@@ -27,12 +27,27 @@ class SpecialUserDashboard extends SpecialPage {
             $out->addWikiTextAsContent("* [[" . $title->getPrefixedText() . "]]");
         }
 
-        // You can add logic for sections/categories here
+        // List categories tree for current user
+        $out->addWikiTextAsContent("== Category Tree ==\n");
+        $user = $this->getUser();
+        $dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection(DB_REPLICA);
+        $res = $dbr->select(
+            'category',
+            ['cat_title'],
+            [],
+            __METHOD__
+        );
 
-        $out->addWikiTextAsContent("== Sections ==\n");
-        $out->addWikiTextAsContent("* Add your section listing logic here.");
+        foreach ($res as $row) {
+            $catTitle = Title::makeTitle(NS_CATEGORY, $row->cat_title);
+            // Check if user can read this category using PermissionManager
+            $permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
+            if ($permissionManager->userCan('read', $user, $catTitle)) {
+                $out->addWikiTextAsContent("* [[" . $catTitle->getPrefixedText() . "]]");
+            }
+        }
 
-        // $out->addWikiTextAsContent("...");
+        // Optionally, you can use CategoryTree extension for better visualization
     }
 }
 
