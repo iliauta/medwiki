@@ -9,6 +9,14 @@ class SpecialUserDashboard extends SpecialPage {
     }
 
     public function execute($subPage) {
+        $user = $this->getUser();
+        // Redirect if user is logged in and not already on UserHome
+        $title = $this->getPageTitle();
+        if ($user && $user->isRegistered() && $title->getPrefixedText() !== 'Special:UserHome') {
+            header('Location: /index.php/Special:UserHome');
+            exit;
+        }
+
         $out = $this->getOutput();
         $out->setPageTitle('Available Pages and Sections');
 
@@ -46,9 +54,9 @@ class SpecialUserDashboard extends SpecialPage {
                 $categoryLinks[] = $catTitle;
             }
         }
-        if ($categoryLinks) {
-            $out->addCategoryLinks($categoryLinks);
-        }
+        // if ($categoryLinks) {
+        //     $out->addCategoryLinks($categoryLinks);
+        // }
 
         // Optionally, you can use CategoryTree extension for better visualization
     }
