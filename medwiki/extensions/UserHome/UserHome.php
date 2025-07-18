@@ -18,7 +18,8 @@ class SpecialUserDashboard extends SpecialPage {
         }
 
         $out = $this->getOutput();
-        $out->setPageTitle('Available Pages and Sections');
+        //$out->setPageTitle('Available Pages and Sections');
+        $out->setPageTitle('Available Categories');
 
         // Get all pages
         $dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection(DB_REPLICA);
@@ -30,32 +31,60 @@ class SpecialUserDashboard extends SpecialPage {
         );
 
         $out->addWikiTextAsContent("== Pages ==\n");
-        foreach ($res as $row) {
-            $title = Title::makeTitle($row->page_namespace, $row->page_title);
-            $out->addWikiTextAsContent("* [[" . $title->getPrefixedText() . "]]");
-        }
+        // foreach ($res as $row) {
+        //     $title = Title::makeTitle($row->page_namespace, $row->page_title);
+        //     $out->addWikiTextAsContent("* [[" . $title->getPrefixedText() . "]]");
+        // }
 
         // List categories tree for current user
         $out->addWikiTextAsContent("== Category Tree ==\n");
         $user = $this->getUser();
+        $userId = $user ? $user->getId() : 0;
         $dbr = MediaWikiServices::getInstance()->getDBLoadBalancer()->getConnection(DB_REPLICA);
-        $res = $dbr->select(
-            'category',
-            ['cat_title'],
-            [],
-            __METHOD__
-        );
 
-        $categoryLinks = [];
-        foreach ($res as $row) {
-            $catTitle = Title::makeTitle(NS_CATEGORY, $row->cat_title);
-            $permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
-            if ($permissionManager->userCan('read', $user, $catTitle)) {
-                $categoryLinks[] = $catTitle;
+        // Use raw SQL to get only categories the user can read or edit
+        $sql = "
+            SELECT c.cat_title, parent.cat_title AS parent_cat_title
+            FROM medcategory c
+            LEFT JOIN medcategory parent ON c.parent_id = parent.cat_id
+            INNER JOIN category_group_rights cgr ON cgr.cat_id = c.cat_id
+            INNER JOIN user_group_membership ugm ON ugm.group_id = cgr.group_id AND ugm.user_id = $userId
+            INNER JOIN rights r ON r.right_id = cgr.right_id
+            WHERE r.right_name IN ('read', 'edit')
+            GROUP BY c.cat_title, parent.cat_title
+            ORDER BY parent.cat_title ASC, c.cat_title ASC
+        ";
+        $res = $dbr->query( $sql, __METHOD__ );
+
+        while ( $row = $res->fetchObject() ) {
+            $catTitleRaw = isset($row->cat_title) ? trim($row->cat_title) : '';
+            $parentCatTitleRaw = isset($row->parent_cat_title) ? trim($row->parent_cat_title) : '';
+            if ($catTitleRaw !== '' && strlen($catTitleRaw) > 0) {
+                $catTitle = Title::makeTitle(NS_CATEGORY, $catTitleRaw);
+                $name = ucfirst($catTitle->getText());
+                $parentName = $parentCatTitleRaw !== '' ? ucfirst($parentCatTitleRaw) : '';
+                $out->addHTML(
+                    '<div>' .
+                    ($parentName ? '<span style="color:gray">' . htmlspecialchars($parentName) . ' &gt; </span>' : '') .
+                    '<a href="' . htmlspecialchars($catTitle->getLocalURL()) . '">' .
+                    htmlspecialchars($name) .
+                    '</a></div>'
+                );
+            } else {
+                $out->addHTML("<div style='color:red'>Empty category title found in database!</div>");
             }
         }
+
+        // $categoryLinks = [];
+        // foreach ($res as $row) {
+        //     $catTitle = Title::makeTitle(NS_CATEGORY, $row->cat_title);
+        //     $permissionManager = MediaWikiServices::getInstance()->getPermissionManager();
+        //     if ($permissionManager->userCan('read', $user, $catTitle)) {
+        //         $categoryLinks[] = $catTitle;
+        //     }
+        // }
         // if ($categoryLinks) {
-        //     $out->addCategoryLinks($categoryLinks);
+        //    $out->addCategoryLinks($categoryLinks);
         // }
 
         // Optionally, you can use CategoryTree extension for better visualization
@@ -64,4 +93,11 @@ class SpecialUserDashboard extends SpecialPage {
 
 $wgExtensionMessagesFiles[] = __DIR__ . '/UserHome.alias.php';
 
+//Programming comments
+// This Code used to show loinks in bottom of page. So we can use it to add some links on bottom of the page 
+//$out->addWikiTextAsContent("* [[" . $catTitle->getPrefixedText() . "]]);
+
+// $out->addCategoryLinks($categoryLinks);
+// This does very similar thing to the above, but uses a different method   
+//Programming comments
 
