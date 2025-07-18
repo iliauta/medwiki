@@ -56,22 +56,29 @@ class SpecialUserDashboard extends SpecialPage {
         ";
         $res = $dbr->query( $sql, __METHOD__ );
 
+        // Build a parent => [subcategories] array
+        $categoriesTree = [];
         while ( $row = $res->fetchObject() ) {
             $catTitleRaw = isset($row->cat_title) ? trim($row->cat_title) : '';
             $parentCatTitleRaw = isset($row->parent_cat_title) ? trim($row->parent_cat_title) : '';
             if ($catTitleRaw !== '' && strlen($catTitleRaw) > 0) {
+                $categoriesTree[$parentCatTitleRaw][] = $catTitleRaw;
+            }
+        }
+
+        // Output the tree
+        foreach ($categoriesTree as $parentNameRaw => $subcats) {
+            // If parentNameRaw is empty or parent id is -1, treat as root
+            $isRoot = ($parentNameRaw === '' || $parentNameRaw === '-1');
+            $parentName = !$isRoot ? ucfirst($parentNameRaw) : '';
+            if (!$isRoot) {
+                $out->addHTML('<div style="font-weight:bold; margin-top:10px;">' . htmlspecialchars($parentName) . '</div>');
+            }
+            foreach ($subcats as $catTitleRaw) {
                 $catTitle = Title::makeTitle(NS_CATEGORY, $catTitleRaw);
                 $name = ucfirst($catTitle->getText());
-                $parentName = $parentCatTitleRaw !== '' ? ucfirst($parentCatTitleRaw) : '';
-                $out->addHTML(
-                    '<div>' .
-                    ($parentName ? '<span style="color:gray">' . htmlspecialchars($parentName) . ' &gt; </span>' : '') .
-                    '<a href="' . htmlspecialchars($catTitle->getLocalURL()) . '">' .
-                    htmlspecialchars($name) .
-                    '</a></div>'
-                );
-            } else {
-                $out->addHTML("<div style='color:red'>Empty category title found in database!</div>");
+                $margin = $isRoot ? '0px' : '30px';
+                $out->addHTML('<div style="margin-left:' . $margin . ';"><a href="' . htmlspecialchars($catTitle->getLocalURL()) . '">' . htmlspecialchars($name) . '</a></div>');
             }
         }
 
