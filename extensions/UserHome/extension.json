@@ -1,0 +1,20 @@
+{
+    "name": "UserHome",
+    "author": "Your Name",
+    "description": "Custom user dashboard and permission manager.",
+    "version": "1.0.0",
+    "manifest_version": 2,
+    "ServiceWiringFiles": [
+        "CustomPermissionManagerWiring.php"
+    ],
+    "AutoloadClasses": {
+        "SpecialUserDashboard": "UserHome.php",
+        "CustomPermissionManager": "CustomPermissionManager.php"
+    },
+    "SpecialPages": {
+        "UserHome": "SpecialUserDashboard"
+    },
+    "ExtensionMessagesFiles": [
+        "UserHome.alias.php"
+    ]
+}
